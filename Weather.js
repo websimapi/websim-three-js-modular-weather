@@ -14,7 +14,10 @@ export class Weather {
             height: 15.0,
             area: 30.0,
             color: '#ffffff',
+            enabled: true,
         };
+
+        this.points = null; // Expose points object
 
         this.init();
     }
@@ -51,11 +54,14 @@ export class Weather {
         });
 
         this.points = new THREE.Points(geometry, this.material);
-        this.scene.add(this.points);
+        if (this.scene) {
+            this.scene.add(this.points);
+        }
+        this.updateVisibility();
     }
 
     update(deltaTime, elapsedTime) {
-        if (this.material) {
+        if (this.material && this.params.enabled) {
             this.material.uniforms.uTime.value = elapsedTime;
         }
     }
@@ -67,7 +73,14 @@ export class Weather {
         this.material.uniforms.uWind.value = this.params.wind;
         this.material.uniforms.uHeight.value = this.params.height;
         this.material.uniforms.uColor.value.set(this.params.color);
+        this.updateVisibility();
         // Note: Count and Area require re-creating the geometry, which is more involved.
         // For this example, we'll stick to uniform-based parameters.
+    }
+
+    updateVisibility() {
+        if (this.points) {
+            this.points.visible = this.params.enabled;
+        }
     }
 }
