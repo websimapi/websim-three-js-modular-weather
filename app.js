@@ -48,24 +48,72 @@ export async function runApp() {
 
     // --- Weather Module Integration ---
     const iframe = document.createElement('iframe');
-    iframe.src = 'https://websim.com/@api/three-js-modular-weather?embed=true';
+    iframe.src = '/?embed=true'; // Use relative path for same-origin in dev, will be cross-origin in production
     iframe.style.display = 'none';
     document.body.appendChild(iframe);
 
-    let weather = null;
+    let weatherEffect = null;
 
     iframe.onload = () => {
-        // Access the weather instance from the iframe's window
-        if (iframe.contentWindow.weather) {
-            weather = iframe.contentWindow.weather;
-            // Add the weather effect's 3D object to our core scene
-            scene.add(weather.points);
-            // Create GUI to control the weather module from the core app
-            createGUI(weather);
-        } else {
-            console.error("Could not load weather module from iframe.");
-        }
+        // Use postMessage for secure cross-origin communication
+        iframe.contentWindow.postMessage('get-weather-data', '*');
     };
+
+    window.addEventListener('message', (event) => {
+        // Basic security: check origin if known, or message type
+        if (event.source !== iframe.contentWindow || event.data.type !== 'weather-data') {
+            return;
+        }
+
+        const data = event.data.payload;
+
+        // Reconstruct the weather effect in the main scene
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.BufferAttribute(data.attributes.position, 3));
+        geometry.setAttribute('aRandom', new THREE.BufferAttribute(data.attributes.aRandom, 1));
+
+        const material = new THREE.ShaderMaterial({
+            vertexShader: data.vertexShader,
+            fragmentShader: data.fragmentShader,
+            uniforms: {
+                uTime: { value: 0.0 },
+                uSize: { value: data.params.size },
+                uSpeed: { value: data.params.speed },
+                uWind: { value: data.params.wind },
+                uHeight: { value: data.params.height },
+                uColor: { value: new THREE.Color(data.params.color) },
+            },
+            transparent: true,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
+        });
+
+        const points = new THREE.Points(geometry, material);
+        scene.add(points);
+
+        weatherEffect = {
+            points,
+            material,
+            params: data.params,
+            update: (deltaTime, elapsedTime) => {
+                if (points.visible) {
+                    material.uniforms.uTime.value = elapsedTime;
+                }
+            },
+            updateParams: () => {
+                material.uniforms.uSize.value = data.params.size;
+                material.uniforms.uSpeed.value = data.params.speed;
+                material.uniforms.uWind.value = data.params.wind;
+                material.uniforms.uColor.value.set(data.params.color);
+                points.visible = data.params.enabled;
+            }
+        };
+
+        // Create GUI to control the weather module from the core app
+        createGUI(weatherEffect);
+        console.log("Weather module loaded successfully from iframe.");
+    }, false);
+
 
     const clock = new THREE.Clock();
 
@@ -76,8 +124,8 @@ export async function runApp() {
         const elapsedTime = clock.getElapsedTime();
 
         // Update the weather module if it has been loaded
-        if (weather) {
-            weather.update(deltaTime, elapsedTime);
+        if (weatherEffect) {
+            weatherEffect.update(deltaTime, elapsedTime);
         }
 
         controls.update();

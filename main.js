@@ -12,12 +12,28 @@ async function main() {
         const { Weather } = await import('./Weather.js');
         const vertexShader = await fetch('./rain.vert').then(res => res.text());
         const fragmentShader = await fetch('./rain.frag').then(res => res.text());
-        
-        // Don't attach to a scene, just prepare the instance
+
         const weather = new Weather({ vertexShader, fragmentShader });
 
-        // Expose the instance for the parent window to consume
-        window.weather = weather;
+        window.addEventListener('message', (event) => {
+            // A basic security check for the message origin could be added here
+            // if (event.origin !== 'https://expected-parent-origin.com') return;
+
+            if (event.data === 'get-weather-data') {
+                const payload = {
+                    params: weather.params,
+                    vertexShader: weather.vertexShader,
+                    fragmentShader: weather.fragmentShader,
+                    attributes: {
+                        position: weather.points.geometry.attributes.position.array,
+                        aRandom: weather.points.geometry.attributes.aRandom.array,
+                    }
+                };
+
+                event.source.postMessage({ type: 'weather-data', payload }, event.origin);
+            }
+        }, false);
+
     } else {
         // This is the core application, which will embed the module
         const { runApp } = await import('./app.js');
